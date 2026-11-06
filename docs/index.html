@@ -210,7 +210,7 @@ footer { padding-block: 56px 0; font-family: var(--font-display); font-size: 0.8
     <p class="kicker">01</p>
     <h2>Architecture</h2>
     <figure>
-      <img class="paper-fig" src="static/pipeline_cam_ready.png" width="2400" height="619"
+      <img class="paper-fig" src="static/rigidgs_arch.png" width="2400" height="620"
            alt="Pipeline: multi-view images and user point prompts go to SAM2; refined masks label the COLMAP point cloud; unified 3DGS training uses photometric loss, mask BCE and boundary regularization; the segmented 3DGS then goes through LaMa inpainting and background-only refinement.">
       <figcaption><b>Overview.</b> Masks are refined and point labels assigned before training starts. Training fits geometry under fixed labels, then inpaints the removed object's hole.</figcaption>
     </figure>

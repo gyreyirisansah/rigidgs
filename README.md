@@ -8,12 +8,9 @@ voted onto the SfM point cloud. During training a 2D mask loss and a 3D boundary
 regularizer keep each Gaussian on its own object. After training, the removed
 object's hole is inpainted with LaMa and the background is refined.
 
-```
-photos ─► preprocessing.py ─► point_cloud/pcd_data ─► train.py ─► eval/
-          SfM, SAM2 masks,                            Stage 1: segmentation training
-          mask refinement,                            Stage 2: hole detection + inpainting
-          3D point labels                             Stage 3: background refinement
-```
+<p align="center">
+  <img src="docs/static/rigidgs_arch.png" alt="RigidGS architecture" width="100%">
+</p>
 
 ## Contents
 
@@ -30,7 +27,7 @@ photos ─► preprocessing.py ─► point_cloud/pcd_data ─► train.py ─�
 Tested on Ubuntu with an NVIDIA RTX A6000 (48 GB), CUDA 12.9, Python 3.10, PyTorch 2.8.
 
 ```bash
-git clone <this repo> RigidGS && cd RigidGS
+git clone https://github.com/gyreyirisansah/rigidgs RigidGS && cd RigidGS
 conda env create -f environment.yml
 conda activate rigidgs
 bash scripts/setup_external.sh
