@@ -631,6 +631,7 @@ def training(dataset, opt, pipe, training_params, testing_iterations,
     sam2_checkpoint   = _get('sam2_checkpoint',   '')
     sam2_config       = _get('sam2_config',       '')
     inpaint_cache_dir = _get('inpaint_cache_dir', '')
+    mask_dilation_pixels = _get('mask_dilation_pixels', 20)
     if not inpaint_cache_dir:
         # Resolved once, here, because Stage 3 reads the hole masks LaMa was
         # given from under this directory.
@@ -810,6 +811,7 @@ def training(dataset, opt, pipe, training_params, testing_iterations,
                     use_direct_inference=False,
                     sam2_checkpoint=sam2_checkpoint, sam2_config=sam2_config,
                     use_sam2_propagation=True,
+                    mask_dilation_pixels=mask_dilation_pixels,
                 )
                 batch_inpaint_all_cameras(
                     inpainter=inpainter, gaussians=gaussians,
@@ -1387,6 +1389,10 @@ if __name__ == "__main__":
                         default="configs/sam2.1/sam2.1_hiera_l.yaml")
     parser.add_argument("--inpaint_cache_dir", type=str, default="",
                         help="Default: <model_path>/online_inpainting/inpaint_cache.")
+    parser.add_argument("--mask_dilation_pixels", type=int, default=20,
+                        help="Grow the SAM2 hole mask by this many pixels before handing it "
+                             "to LaMa, so no sliver of the removed object's old edge survives "
+                             "inpainting.")
 
     # Stage 3 refinement
     parser.add_argument("--refine_after_inpaint", action="store_true", default=False,
