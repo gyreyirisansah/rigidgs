@@ -162,7 +162,23 @@ flags also given explicitly on the command line still wins over the config (or u
 - **Stage 1 (iterations 1–30000):** trains the scene with the mask loss and the boundary regularizer. The regularizer has three loss terms: flattening, shrinkage and cross-object repulsion. Gaussians created by densification inherit their parent's fixed label, so no label ever changes.
 - **Stage 2 (at iteration 30000):** asks for **one click** on the removed object's hole in a background-only render, then inpaints all views. It saves `chkpnt30000.pth` first.
 - **Stage 3 (7000 iterations):** refines the background. It first adds background Gaussians in the hole, placed at a depth interpolated from the background around it. Training then alternates a full-scene step on the original photos with a background-only L1 step on the inpainted images, with the foreground frozen. During the first half, background Gaussians near the removed object are densified and pruned with Stage 1's thresholds.
-- **Rerunning Stage 3:** resume from the checkpoint with `--start_checkpoint <run>/chkpnt30000.pth --skip_reinpaint`.
+- **Resuming from `chkpnt30000.pth`** (Stage 1 already done -- re-run Stage 2+3 without
+  retraining from scratch): take the original training command and append `--start_checkpoint`:
+
+  ```bash
+  python src/train.py \
+    -s output/llff/fern/point_cloud/pcd_data \
+    -m output/llff/fern/rigidgs \
+    --_images data/llff/fern/images \
+    --masks_dir output/llff/fern/preprocessing/refined/refined_masks \
+    --config configs/llff/fern.json --eval \
+    --start_checkpoint output/llff/fern/rigidgs/chkpnt30000.pth
+  ```
+
+  This redoes Stage 2 (the hole click + LaMa inpainting) and Stage 3 from the checkpointed
+  Stage 1 state. Add `--skip_reinpaint` only if the inpainted images already on disk from a
+  previous Stage 2 are the ones you want to keep -- it skips SAM2/LaMa and the hole click
+  entirely and reuses them, falling back to inpainting (with a warning) if none are found.
 
 | Flag | Use |
 |---|---|

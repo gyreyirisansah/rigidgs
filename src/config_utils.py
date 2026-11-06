@@ -37,9 +37,21 @@ def apply_config_defaults(parser, config: dict, section: str) -> None:
     alias to a differently-named dest (e.g. --label-with-sam2-masks ->
     dest label_with_refined_masks) resolve exactly as they would if typed
     on the command line.
+
+    The config's section only carries tunable settings, never required
+    path arguments (e.g. train.py's --_images), so this parse must not
+    enforce `required` -- that's still enforced by the real parse_args()
+    call on the full command line afterwards.
     """
     flags = as_flags(config.get(section, {}), "--")
-    resolved, _ = parser.parse_known_args(flags)
+    required_actions = [a for a in parser._actions if a.required]
+    for action in required_actions:
+        action.required = False
+    try:
+        resolved, _ = parser.parse_known_args(flags)
+    finally:
+        for action in required_actions:
+            action.required = True
     parser.set_defaults(**vars(resolved))
 
 
