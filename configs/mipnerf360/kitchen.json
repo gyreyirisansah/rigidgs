@@ -1,0 +1,31 @@
+{
+  "dataset": "mipnerf360",
+  "scene": "kitchen",
+  "images": "data/mipnerf360/kitchen/images_2",
+  "train_images": "data/mipnerf360/kitchen/images",
+  "preprocessing": {
+    "mask-grid-size": 1,
+    "mask-reprompt-missing-fraction": 0.1,
+    "mask-depth-quantile-high": 99.99,
+    "point-refinement": "dbscan"
+  },
+  "train": {
+    "mask_2d_bg_margin": 3,
+    "inpaint_at_iter": 30000,
+    "refine_after_inpaint": true,
+    "refine_iterations": 7000
+  },
+  "eval_iteration": 20000,
+  "paper": {
+    "iou": 0.939,
+    "boundary_iou": 0.751,
+    "accuracy": 0.99,
+    "fg_psnr": 21.58,
+    "bg_psnr": 22.06
+  },
+  "notes": {
+    "paper_run": "PAMGS output/rigidgs/mipnerf360/kitchen/run_new_Explicit",
+    "images": "SfM and SAM 2 ran on images_2; training read the full-size images/",
+    "refiner": "dbscan; the paper's unseeded spacing estimate was 0.01844 on the paper SfM (pass --mean-spacing only with that SfM)"
+  }
+}

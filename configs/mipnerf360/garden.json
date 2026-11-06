@@ -1,0 +1,31 @@
+{
+  "dataset": "mipnerf360",
+  "scene": "garden",
+  "images": "data/mipnerf360/garden/images",
+  "preprocessing": {
+    "mask-grid-size": 1,
+    "mask-reprompt-missing-fraction": 0.1,
+    "mask-depth-quantile-high": 99.99,
+    "knn-threshold": 0.98,
+    "point-refinement": "knn"
+  },
+  "train": {
+    "mask_2d_bg_margin": 15,
+    "inpaint_at_iter": 30000,
+    "refine_after_inpaint": true,
+    "refine_iterations": 7000
+  },
+  "eval_iteration": 30000,
+  "paper": {
+    "iou": 0.963,
+    "boundary_iou": 0.941,
+    "accuracy": 0.999,
+    "fg_psnr": 24.41,
+    "bg_psnr": 26.85
+  },
+  "notes": {
+    "paper_run": "PAMGS output/rigidgs/mipnerf360/garden/run_LERN_FREEZE_EXPLICIT",
+    "refiner": "knn at threshold 0.98 reproduces the paper labels exactly",
+    "unverified": "margin 15 could not be recovered for this Jun 25 run (README value)"
+  }
+}

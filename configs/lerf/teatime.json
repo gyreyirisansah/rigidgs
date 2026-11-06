@@ -1,0 +1,26 @@
+{
+  "dataset": "lerf",
+  "scene": "teatime",
+  "images": "data/lerf/teatime/images",
+  "preprocessing": {
+    "mask-grid-size": 1,
+    "mask-reprompt-missing-fraction": 0.1,
+    "mask-depth-quantile-high": 99.99,
+    "label-with-sam2-masks": true,
+    "point-refinement": "knn"
+  },
+  "train": {
+    "mask_2d_per_object": true,
+    "mask_2d_bg_margin": 0.5,
+    "inpaint_at_iter": 30000,
+    "refine_after_inpaint": true,
+    "refine_iterations": 7000
+  },
+  "eval_iteration": 30000,
+  "notes": {
+    "status": "new multi-object validation run, not a documented paper number -- teatime was not in the original paper's single-object table",
+    "objects": "3 foreground objects (apple, package, plate) + background, per the prior PAMGS run output/rigidgs/lerf/teatime/run_LERN_FREEZE_EXPLICIT/object_id_to_name.json -- preprocessing's interactive SAM2 step needs 3 clicks with those object names typed in",
+    "settings_basis": "ported from configs/llff/fern.json as a reasonable starting point; untuned for this scene",
+    "mask_refinement": "grid 1 with default re-prompt/depth settings, no edge restoration; training's 2D mask loss uses the refined masks, the point labels are voted with the raw SAM2 masks and then KNN-refined (0.9)"
+  }
+}

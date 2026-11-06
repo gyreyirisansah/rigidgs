@@ -1,0 +1,30 @@
+{
+  "dataset": "llff",
+  "scene": "trex",
+  "images": "data/llff/trex/images",
+  "preprocessing": {
+    "mask-grid-size": 1,
+    "mask-reprompt-missing-fraction": 0.1,
+    "mask-depth-quantile-high": 99.99,
+    "point-refinement": "knn"
+  },
+  "train": {
+    "mask_2d_bg_margin": 15,
+    "inpaint_at_iter": 30000,
+    "refine_after_inpaint": true,
+    "refine_iterations": 7000
+  },
+  "eval_iteration": 30000,
+  "paper": {
+    "iou": 0.59,
+    "boundary_iou": 0.55,
+    "accuracy": 0.938,
+    "fg_psnr": 12.46,
+    "bg_psnr": 15.02
+  },
+  "notes": {
+    "paper_run": "PAMGS output/rigidgs/llff/trex/run_LERN_FREEZE_EXPLICIT",
+    "unverified": "margin 15 and the mask-loss masks could not be recovered for this Jun 25 run (README value)",
+    "prompt_sensitivity": "The skeleton's thin, overlapping bone structures make the SAM 2 mask sensitive to click placement. Matching the paper's mask closely usually takes a few corrective points, not just the first click -- see 'A note on exact reproducibility' in the README."
+  }
+}

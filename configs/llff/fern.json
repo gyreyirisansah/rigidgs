@@ -1,0 +1,29 @@
+{
+  "dataset": "llff",
+  "scene": "fern",
+  "images": "data/llff/fern/images",
+  "preprocessing": {
+    "mask-grid-size": 4,
+    "mask-edge-restoration": true,
+    "mask-reprompt-missing-fraction": 0.15,
+    "mask-depth-quantile-high": 98.0,
+    "point-refinement": "knn"
+  },
+  "train": {
+    "mask_2d_bg_margin": 0.5,
+    "inpaint_at_iter": 30000,
+    "refine_after_inpaint": true,
+    "refine_iterations": 7000
+  },
+  "eval_iteration": 30000,
+  "paper": {
+    "iou": 0.726,
+    "boundary_iou": 0.714,
+    "accuracy": 0.907,
+    "fg_psnr": 11.07,
+    "bg_psnr": 15.88
+  },
+  "notes": {
+    "paper_run": "PAMGS output/rigidgs/llff/fern/WACV2027_Round2/Full_RigidGS_Training"
+  }
+}
