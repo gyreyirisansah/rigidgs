@@ -44,6 +44,9 @@ CONFIG_DIR = REPO_ROOT / "configs"
 STEPS = ("preprocess", "train", "eval")
 METRICS = ("iou", "boundary_iou", "accuracy", "fg_psnr", "bg_psnr")
 
+sys.path.insert(0, str(REPO_ROOT / "src"))
+from config_utils import as_flags, scene_paths  # noqa: E402 -- shared with preprocessing.py/train.py
+
 
 def load_configs(names):
     if names == ["all"]:
@@ -54,37 +57,6 @@ def load_configs(names):
     if missing:
         sys.exit(f"No config: {', '.join(missing)}")
     return [json.loads(p.read_text()) for p in paths]
-
-
-def as_flags(options, dash):
-    """{"mask-grid-size": 4, "mask-edge-restoration": true} -> CLI flags.
-    True adds the bare flag, False/None leaves it out."""
-    flags = []
-    for key, value in options.items():
-        if value is False or value is None:
-            continue
-        flags.append(dash + key)
-        if value is not True:
-            flags.append(str(value))
-    return flags
-
-
-def scene_paths(cfg):
-    out = Path("output") / cfg["dataset"] / cfg["scene"]
-    spinnerf = cfg["preprocessing"].get("spinnerf", False)
-    refined = not cfg["preprocessing"].get("no-mask-refinement", False)
-    return {
-        "out": out,
-        "model": out / "rigidgs",
-        "pcd": out / "point_cloud" / "pcd_data",
-        # --spinnerf trains on the undistorted copies preprocessing writes;
-        # "train_images" trains on other photos than preprocessing saw (kitchen)
-        "images": (out / "images_undistorted" if spinnerf
-                   else Path(cfg.get("train_images", cfg["images"]))),
-        "masks": out / "preprocessing" / ("refined/refined_masks" if refined
-                                          else "segmentation/masks"),
-        "split": ["--eval", "--llffhold", "0"] if spinnerf else ["--eval"],
-    }
 
 
 def step_cmds(cfg, step, port):

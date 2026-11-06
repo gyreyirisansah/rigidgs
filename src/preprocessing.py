@@ -40,6 +40,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import config_utils
+
 
 def _cleanup_memory():
     gc.collect()
@@ -239,8 +241,14 @@ def copy_labels_without_refinement(sfm_dir: Path, point_cloud_dir: Path):
 # =====================================================================
 def build_parser():
     p = argparse.ArgumentParser(description="RigidGS preprocessing (everything before training).")
-    p.add_argument("--images", required=True, help="Folder of input photos.")
-    p.add_argument("--output", required=True,
+    p.add_argument("--config", default=None,
+                   help="Path to configs/<dataset>/<scene>.json. Sets --images, --output and "
+                        "this scene's --mask-*/--point-refinement/--knn-threshold paper "
+                        "settings as defaults; any of those also given explicitly on the "
+                        "command line still wins. Required unless --images/--output and the "
+                        "individual --mask-* flags are all given by hand.")
+    p.add_argument("--images", default=None, help="Folder of input photos.")
+    p.add_argument("--output", default=None,
                    help="Scene output folder, e.g. output/llff/fern.")
 
     p.add_argument("--skip-sfm", action="store_true", help="Reuse <output>/sfm.")
@@ -319,7 +327,16 @@ def is_tanks_and_temples(images_dir: Path) -> bool:
 
 
 def main():
-    args = build_parser().parse_args()
+    parser = build_parser()
+    pre_args, _ = parser.parse_known_args()
+    if pre_args.config:
+        cfg = config_utils.load_config(pre_args.config)
+        config_utils.apply_config_defaults(parser, cfg, "preprocessing")
+        parser.set_defaults(images=cfg["images"],
+                             output=str(config_utils.scene_paths(cfg)["out"]))
+    args = parser.parse_args()
+    if not args.images or not args.output:
+        parser.error("--images and --output are required (or pass --config).")
     out = Path(args.output)
     sfm_dir = out / "sfm"
     seg_dir = out / "preprocessing" / "segmentation"

@@ -1313,6 +1313,14 @@ if __name__ == "__main__":
     parser.add_argument('--_images',
                         required=True,
                         help="Folder of the training photos (the same images preprocessing.py used).")
+    parser.add_argument("--config", default=None,
+                        help="Path to configs/<dataset>/<scene>.json. Sets this scene's paper "
+                             "hyperparameters (mask_2d_bg_margin, inpaint_at_iter, "
+                             "refine_after_inpaint, refine_iterations, mask_2d_per_object, "
+                             "cleanup_at_saving, ...) as defaults; any of those also given "
+                             "explicitly on the command line still wins. Does not set "
+                             "-s/-m/--_images/--masks_dir -- those still need to be given "
+                             "by hand (or use scripts/run_pipeline.py, which derives them too).")
 
     # Boundary reg
     parser.add_argument("--boundary_reg_weight",      type=float, default=1.0)
@@ -1430,6 +1438,11 @@ if __name__ == "__main__":
                         help="Iteration at which to commit labels and freeze "
                              "object_logits. Default: opt.densify_from_iter (500).")
 
+    pre_args, _ = parser.parse_known_args(sys.argv[1:])
+    if pre_args.config:
+        import config_utils
+        cfg = config_utils.load_config(pre_args.config)
+        config_utils.apply_config_defaults(parser, cfg, "train")
     args = parser.parse_args(sys.argv[1:])
     args.save_iterations.append(args.iterations)
 

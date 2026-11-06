@@ -73,6 +73,10 @@ Run from the repository root, once per scene:
 python src/preprocessing.py --images data/llff/fern/images --output output/llff/fern
 ```
 
+That runs every `--mask-*` flag at its generic default, **not** this scene's paper setting --
+see "Config-driven defaults" below if you want fern's actual numbers without copying them by
+hand.
+
 **Interactive step:** a window opens on one frame. Click on each object you want to segment and name it in the terminal. SAM 2 then propagates the masks to every frame.
 
 | Step | Output under `--output` |
@@ -83,6 +87,15 @@ python src/preprocessing.py --images data/llff/fern/images --output output/llff/
 | 4. 3D point labeling (multi-view voting of the raw SAM 2 masks; refined masks for Tanks and Temples) | `point_cloud/labeled_point_cloud.ply` |
 | 5. Point-label refinement | `point_cloud/pcd_data/sparse/0/` ← the training input |
 
+- **Config-driven defaults:** pass `--config configs/<dataset>/<scene>.json` and the four
+  `--mask-*` flags (grid size, edge restoration, reprompt-missing-fraction, depth-quantile-high)
+  and `--point-refinement`/`--knn-threshold` default to that scene's paper settings instead of
+  the script's generic ones -- the same values `scripts/run_pipeline.py` uses. Any of those
+  flags also given explicitly on the command line still overrides the config. `--images` and
+  `--output` are filled in from the config too, so the fern example above becomes just
+  `python src/preprocessing.py --config configs/llff/fern.json`. These settings only matter
+  while mask refinement is actually running, i.e. you haven't also passed
+  `--no-mask-refinement`.
 - **Timing:** `preprocessing_timing.json` records each step's wall-clock time, including the time spent clicking (Table 7).
 - **Re-running:** each step can be skipped to reuse the output it already wrote, so you can rerun from any step onward. For example, to redo mask refinement with new settings without clicking again, pass `--skip-sfm --skip-segmentation`.
 
@@ -90,7 +103,7 @@ python src/preprocessing.py --images data/llff/fern/images --output output/llff/
   |---|---|
   | `--skip-sfm` | Reuse `sfm/` |
   | `--skip-segmentation` | Reuse the SAM 2 masks in `preprocessing/segmentation/` (no clicking) |
-  | `--skip-mask-refinement` | Reuse the refined masks in `preprocessing/refined/` |
+  | `--skip-mask-refinement` | No refinement this run -- whatever is already in `preprocessing/refined/` is used as-is. That can be our refined output from an earlier run, raw SAM 2 masks you copied there yourself, or masks from anywhere else; training only reads `--masks_dir`, it doesn't care where the masks came from. |
   | `--skip-labeling` | Reuse `point_cloud/labeled_point_cloud.ply` |
   | `--skip-point-refinement` | Copy the labeled points into `pcd_data` without refining their labels |
 
@@ -127,6 +140,14 @@ python src/train.py \
 ```
 
 `--eval` holds out every 8th view for the segmentation evaluation.
+
+**Config-driven defaults:** add `--config configs/<dataset>/<scene>.json` and this scene's
+`--mask_2d_bg_margin`, `--inpaint_at_iter`, `--refine_after_inpaint`, `--refine_iterations`,
+`--mask_2d_per_object` and `--cleanup_at_saving` default to the table below instead of
+`train.py`'s generic defaults; any of those also given explicitly on the command line still
+wins. It does not set `-s`/`-m`/`--_images`/`--masks_dir` -- those depend on where
+preprocessing wrote its output, so still pass them by hand (or use
+`scripts/run_pipeline.py`, which derives them for you).
 
 - **Stage 1 (iterations 1–30000):** trains the scene with the mask loss and the boundary regularizer. The regularizer has three loss terms: flattening, shrinkage and cross-object repulsion. Gaussians created by densification inherit their parent's fixed label, so no label ever changes.
 - **Stage 2 (at iteration 30000):** asks for **one click** on the removed object's hole in a background-only render, then inpaints all views. It saves `chkpnt30000.pth` first.
@@ -187,6 +208,12 @@ For example, fern:
 python src/preprocessing.py --images data/llff/fern/images --output output/llff/fern \
   --mask-grid-size 4 --mask-edge-restoration \
   --mask-reprompt-missing-fraction 0.15 --mask-depth-quantile-high 98.0
+```
+
+or equivalently, letting `--config` fill in this table's row for you:
+
+```bash
+python src/preprocessing.py --config configs/llff/fern.json
 ```
 
 To redo only the mask refinement and everything after it, add `--skip-sfm --skip-segmentation`; the existing SfM model and SAM 2 masks are kept.
