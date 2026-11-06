@@ -5,12 +5,13 @@ LaMa-inpainted images (Sec. 3.5 of the paper).
   1. Hole seeding: before training, background Gaussians are inserted on the
      surface hidden behind the removed object, at a depth interpolated from
      the observed background around the hole (seed_hole_from_boundary_depth).
-  2. Training alternates two steps, one per iteration:
+  2. Training alternates two steps, one per iteration, gradients restricted
+     to background Gaussians in both (_zero_non_background_grads):
        odd  iterations: full-scene render, Stage 1's photometric loss
                         (L1 + D-SSIM) against the original image;
        even iterations: background-only render (foreground hidden),
                         L_bg = L1 against the inpainted image over the whole
-                        frame, gradients restricted to background Gaussians.
+                        frame.
      Outside the hole the inpainted image equals the Stage 1 background, so
      L_bg anchors the rest of the scene while it fills the hole.
   3. Densification: during the first half, background Gaussians inside a
@@ -539,6 +540,7 @@ def run_stage3_refinement(
             loss = ((1.0 - opt.lambda_dssim) * l1_loss(pred, gt)
                     + opt.lambda_dssim * (1.0 - ssim(pred, gt)))
             loss.backward()
+            _zero_non_background_grads(gaussians, bg_obj_mask)
             ema_full = 0.4 * float(loss.item()) + 0.6 * ema_full
         else:
             cam = bg_cameras[randint(0, len(bg_cameras) - 1)]
