@@ -537,6 +537,16 @@ def run_stage3_refinement(
             if cam.alpha_mask is not None:
                 pred = pred * cam.alpha_mask.cuda()
             gt = cam.original_image.cuda()
+            # The original photo still has the removed object in it, so
+            # without this, background-labeled Gaussians sitting in/near the
+            # hole (e.g. mislabeled points) get pulled toward reproducing it
+            # here -- the only thing _zero_non_background_grads protects is
+            # correctly fg-labeled Gaussians, not those.
+            hole = _load_refinement_mask_file(refinement_mask_dir, cam, *gt.shape[-2:])
+            if hole is not None:
+                valid = (~hole).float()[None]
+                pred = pred * valid
+                gt = gt * valid
             loss = ((1.0 - opt.lambda_dssim) * l1_loss(pred, gt)
                     + opt.lambda_dssim * (1.0 - ssim(pred, gt)))
             loss.backward()
