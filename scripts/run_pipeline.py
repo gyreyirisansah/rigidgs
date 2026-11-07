@@ -26,7 +26,7 @@ reproducibility"). Run from the repository root.
 Usage:
   python scripts/run_pipeline.py --scenes llff/fern llff/trex --gpus 0,1,2 --dry_run
   python scripts/run_pipeline.py --scenes all --gpus 0,1,2 --steps train eval \\
-      --gt_root data/ground_truth/images --gt_mask_root data/ground_truth/masks
+      --gt_root "Ground Truths" --gt_mask_root GT_Masks
 """
 import argparse
 import csv
