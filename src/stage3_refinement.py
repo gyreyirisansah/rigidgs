@@ -540,7 +540,9 @@ def run_stage3_refinement(
             loss = ((1.0 - opt.lambda_dssim) * l1_loss(pred, gt)
                     + opt.lambda_dssim * (1.0 - ssim(pred, gt)))
             loss.backward()
-            _zero_non_background_grads(gaussians, bg_obj_mask)
+            # TEMPORARILY DISABLED for A/B comparison against the frond-residue
+            # report (2026-11-06) -- re-enable before any real/paper run.
+            # _zero_non_background_grads(gaussians, bg_obj_mask)
             ema_full = 0.4 * float(loss.item()) + 0.6 * ema_full
         else:
             cam = bg_cameras[randint(0, len(bg_cameras) - 1)]
