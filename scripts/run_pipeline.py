@@ -17,16 +17,18 @@ preprocessing finishes, its training and eval go to a free GPU from --gpus
 (one scene per GPU at a time), so the GPUs fill up while you label the next
 scene. The Stage 2 hole click (train, at --inpaint_at_iter) opens a window
 for each training run; stay at the display.
-With --gt_root, the collected renders are scored at the end and compared
-with each config's "paper" numbers as a target to land near -- preprocessing
-re-prompts SAM 2 from scratch each run, so results are not guaranteed to be
-bit-identical to the paper's run (see the README's "note on exact
-reproducibility"). Run from the repository root.
+When "eval" is in --steps, the collected renders are scored at the end and
+compared with each config's "paper" numbers as a target to land near --
+preprocessing re-prompts SAM 2 from scratch each run, so results are not
+guaranteed to be bit-identical to the paper's run (see the README's "note on
+exact reproducibility"). Scoring needs only GT_Masks (shipped in the repo);
+each mask's target photo is looked up live in data/<dataset>/<scene>/images/,
+so no separately staged GT photo directory is required. Run from the
+repository root.
 
 Usage:
   python scripts/run_pipeline.py --scenes llff/fern llff/trex --gpus 0,1,2 --dry_run
-  python scripts/run_pipeline.py --scenes all --gpus 0,1,2 --steps train eval \\
-      --gt_root "Ground Truths" --gt_mask_root GT_Masks
+  python scripts/run_pipeline.py --scenes all --gpus 0,1,2 --steps train eval
 """
 import argparse
 import csv
@@ -138,8 +140,9 @@ def score(configs, args):
     out_dir = REPO_ROOT / "output" / "eval"
     cmd = [sys.executable, "eval/evaluate_segmentation.py",
            "--results_root", "output/eval_renders", "--methods", "RigidGS",
-           "--gt_root", args.gt_root, "--output_dir", str(out_dir),
-           "--scenes"] + [c["scene"] for c in configs]
+           "--output_dir", str(out_dir), "--scenes"] + [c["scene"] for c in configs]
+    if args.gt_root:
+        cmd += ["--gt_root", args.gt_root]
     if args.gt_mask_root:
         cmd += ["--gt_mask_root", args.gt_mask_root]
     print("\nScoring:", " ".join(cmd), flush=True)
@@ -170,8 +173,11 @@ def main():
     ap.add_argument("--gpus", default="0", help="Comma-separated GPU ids, one scene per GPU.")
     ap.add_argument("--steps", nargs="+", choices=STEPS, default=list(STEPS))
     ap.add_argument("--gt_root", default=None,
-                    help="Ground-truth images; when given, score the renders at the end.")
-    ap.add_argument("--gt_mask_root", default=None)
+                    help="Optional: separately staged GT images, if you have them. "
+                         "Not needed otherwise -- each GT_Masks file's target photo "
+                         "is found live in data/<dataset>/<scene>/images/.")
+    ap.add_argument("--gt_mask_root", default="GT_Masks",
+                    help="GT foreground masks, shipped in the repo (default: GT_Masks/).")
     ap.add_argument("--base_port", type=int, default=6100,
                     help="Viewer ports are base_port+1, +2, ... so parallel runs don't clash.")
     ap.add_argument("--dry_run", action="store_true", help="Print the commands and exit.")
@@ -214,7 +220,7 @@ def main():
     for t in threads:
         t.join()
 
-    if args.gt_root and "eval" in steps:
+    if "eval" in steps:
         score(configs, args)
 
 

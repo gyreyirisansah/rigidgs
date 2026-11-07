@@ -59,7 +59,7 @@ data/
 GT_Masks/<dataset>/<scene>/        # evaluation object masks (repository root, not under data/)
 ```
 
-The evaluation ground truth for the segmentation tables goes in `Ground Truths/` and `GT_Masks/` at the repository root (TODO: download link) -- one original photo per scene, copied as-is from `data/<dataset>/<scene>/images/`, for whichever frame the GT mask was actually drawn on. For SPIn-NeRF it is generated from the dataset itself:
+The evaluation ground truth for the segmentation tables is `GT_Masks/` at the repository root (shipped in the repo). No separate GT photo directory is needed: each mask's target photo -- whichever frame the GT segmentation mask was actually drawn on -- is looked up live in `data/<dataset>/<scene>/images/` at eval time. For SPIn-NeRF it is generated from the dataset itself:
 
 ```bash
 python eval/stage_spinnerf_gt.py --scenes 2 4 10
@@ -250,8 +250,7 @@ To redo only the mask refinement and everything after it, add `--skip-sfm --skip
 
 ```bash
 python scripts/run_pipeline.py --scenes llff/fern llff/trex --gpus 0,1,2 --dry_run   # preview the commands
-python scripts/run_pipeline.py --scenes all --gpus 0,1,2 \
-    --gt_root "Ground Truths" --gt_mask_root GT_Masks
+python scripts/run_pipeline.py --scenes all --gpus 0,1,2
 ```
 
 Preprocessing is interactive (Section 3) and runs one scene at a time in this terminal; once a scene is preprocessed, training and evaluation move to a free GPU while you label the next scene.
@@ -271,11 +270,11 @@ python eval/collect_renders.py -m output/llff/fern/rigidgs \
 # ... repeat for every scene ...
 python eval/evaluate_segmentation.py \
   --results_root output/eval_renders \
-  --gt_root "Ground Truths" --gt_mask_root GT_Masks \
+  --gt_mask_root GT_Masks \
   --output_dir output/eval
 ```
 
-`Ground Truths/<dataset>/<scene>/` and `GT_Masks/<dataset>/<scene>/` at the repository root hold one original photo (and its mask) per scene -- whichever frame the GT segmentation mask was actually drawn on, copied as-is from `data/<dataset>/<scene>/images/`, not a downscaled or re-encoded copy, and not the full capture (which would dilute the per-scene average with frames nobody annotated).
+`GT_Masks/<dataset>/<scene>/` at the repository root holds one mask per scene -- whichever frame the GT segmentation mask was actually drawn on. The matching photo isn't staged anywhere; it's looked up live in `data/<dataset>/<scene>/images/` at eval time, so there's nothing to download or keep in sync beyond the dataset itself. (`--gt_root` also accepts a separately staged GT photo directory, if you have one, but it's not needed otherwise.)
 
 This writes `per_view.csv`, `per_scene.csv` and `per_dataset.csv` (IoU, boundary IoU, accuracy, …). Each ground-truth mask is matched to the render whose camera content is closest to the mask's frame. That matching is decoupled from the metric being reported.
 

@@ -22,12 +22,16 @@ Gracefully handles:
 
 Example:
     python evaluate_segmentation.py \\
-        --results_root /path/to/RigidGS_Results_Accum \\
-        --gt_root      /path/to/ground_truth \\
-        --output_dir   /path/to/eval_output \\
+        --results_root  /path/to/RigidGS_Results_Accum \\
+        --gt_mask_root  GT_Masks \\
+        --output_dir    /path/to/eval_output \\
         --skip_lpips
 
-The --gt_root directory must mirror dataset/scene structure:
+No --gt_root is needed in the common case: GT_Masks ships in the repo, and
+each mask's own target photo is looked up live in
+data/<dataset>/<scene>/images/ (see extend_gt_idx_with_orphan_masks). --gt_root
+is only for a separately staged GT photo directory, if you have one; it must
+mirror dataset/scene structure:
     <gt_root>/<dataset>/<scene>/*.png  (or images/*, images_4/*, etc. -- auto-detected)
 """
 
@@ -604,9 +608,13 @@ def main():
     parser.add_argument("--results_root", type=Path, required=True,
                         help="Renders arranged by eval/collect_renders.py: "
                              "<results_root>/<METHOD>/<dataset>/<scene>/{fg,bg,fg_mask}/.")
-    parser.add_argument("--gt_root", type=Path, required=True,
-                        help="Path to ground-truth images, structured "
-                             "<gt_root>/<dataset>/<scene>/[images/]*.png")
+    parser.add_argument("--gt_root", type=Path, default=None,
+                        help="Optional path to separately staged ground-truth images, "
+                             "structured <gt_root>/<dataset>/<scene>/[images/]*.png. "
+                             "Not needed in the common case: each GT_Masks file's own "
+                             "target photo is looked up directly in "
+                             "data/<dataset>/<scene>/images/, so a fresh clone with the "
+                             "datasets downloaded needs no separate GT photo staging.")
     parser.add_argument("--gt_mask_root", type=Path, default=None,
                         help="Optional GT foreground masks, "
                              "<gt_mask_root>/<dataset>/<scene>/*.png. "
@@ -665,16 +673,17 @@ def main():
         bg_dir = scene_dir / "bg"
         pred_mask_dir = scene_dir / "fg_mask"
 
-        gt_dir = _find_gt_dir(args.gt_root, dataset, scene)
+        # --gt_root is optional: GT_Masks ships in the repo on its own, and
+        # each mask's true target photo is looked up live in
+        # data/<dataset>/<scene>/images/ below (extend_gt_idx_with_orphan_masks)
+        # -- so a fresh clone with the datasets downloaded never needs a
+        # separately staged GT photo directory.
+        gt_dir = _find_gt_dir(args.gt_root, dataset, scene) if args.gt_root else None
         gt_mask_dir = _find_gt_mask_dir(args.gt_mask_root, dataset, scene)
-
-        if gt_dir is None:
-            skipped.append((method, dataset, scene, "no GT images found"))
-            continue
 
         fg_idx = _index_directory(fg_dir, IMAGE_EXTS)
         bg_idx = _index_directory(bg_dir, IMAGE_EXTS)
-        gt_idx = _index_directory(gt_dir, IMAGE_EXTS)
+        gt_idx = _index_directory(gt_dir, IMAGE_EXTS) if gt_dir else {}
         pred_idx = _index_directory(pred_mask_dir, MASK_EXTS)
         gt_mask_idx = _index_directory(gt_mask_dir, MASK_EXTS) if gt_mask_dir else {}
 
@@ -682,28 +691,21 @@ def main():
         if not common_renders:
             skipped.append((method, dataset, scene, "no matching fg/bg renders"))
             continue
+
+        # Only reach into the raw capture for orphan masks' photos when the
+        # *staged* GT photos (if any) have zero mask coverage on their own --
+        # see the detailed rationale where this used to run, below. With no
+        # --gt_root at all (gt_idx starts empty), this always fires and is
+        # the sole source of GT photos.
+        if not (set(gt_idx) & set(gt_mask_idx)):
+            gt_idx = extend_gt_idx_with_orphan_masks(dataset, scene, gt_idx, gt_mask_idx)
+
         if not gt_idx:
-            skipped.append((method, dataset, scene, "GT directory empty"))
+            skipped.append((method, dataset, scene, "no GT images found"))
             continue
 
         elapsed = time.time() - t0
         use_fg_as_masks = not pred_idx and bool(fg_idx)
-
-        # Only reach into the raw capture for orphan masks' photos when the
-        # *staged* GT photos have zero mask coverage on their own (llff's
-        # fern/orchids/trex: the mask was drawn on a frame nobody staged).
-        # Datasets with densely per-frame-labeled masks (bear/garden/
-        # kitchen/Train/Truck, 45-300+ mask files) are misleading here --
-        # those mask files mostly belong to *training* frames, not the
-        # staged held-out test views. Checked directly: every one of
-        # those datasets' staged photos already has its own real mask
-        # (bear 1/1, garden 24/24, kitchen 1/1, Train 1/1, Truck 1/1) --
-        # there's nothing to extend, and doing it anyway used to flood
-        # gt_idx with the other 44-300 training-frame masks, forcing
-        # matching to search a huge, mostly-irrelevant pool instead of
-        # using the single already-known, already-correct target(s).
-        if not (set(gt_idx) & set(gt_mask_idx)):
-            gt_idx = extend_gt_idx_with_orphan_masks(dataset, scene, gt_idx, gt_mask_idx)
 
         # --orphan_mask_matching=score (default): replicate
         # eval_all_models.py's evaluate_scene() exactly -- search every
