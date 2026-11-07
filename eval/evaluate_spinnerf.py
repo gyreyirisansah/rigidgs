@@ -1,6 +1,5 @@
 """
-LPIPS + FID + PSNR/SSIM (+ outside-hole PSNR/SSIM) for SPIn-NeRF
-object-removal evaluation.
+LPIPS + FID + PSNR/SSIM for SPIn-NeRF object-removal evaluation (Table 5).
 
 Matches the SPIn-NeRF paper's own protocol exactly (Mirzaei et al., CVPR
 2023, Sec. 5 "Metrics"): "Since our focus is the inpainting, we only
@@ -34,21 +33,8 @@ Input: background_hole_renders/iter_<N>/{stem}.png from render_spinnerf_
 holdout_eval.py, matched by stem against data/ground_truth/images/spinnerf/<scene>/
 and data/ground_truth/masks/spinnerf/<scene>/.
 
-PSNR and SSIM (new) are computed on the SAME bbox crop as LPIPS/FID --
-standard complementary fidelity/structure numbers, cheap to add alongside
-the paper's own two metrics.
-
-Outside-hole PSNR/SSIM (new) are a different check entirely, not part of
-the paper's protocol: computed over the FULL-FRAME complement of the
-object mask (not a padded box -- the whole rest of the scene), comparing
-render against the "no object" ground truth photo there too. This exists
-to directly validate an invariant this pipeline depends on but the paper's
-own inside-the-box metrics can't see at all: that refining the hole didn't
-degrade anything outside it. Should read as near-perfect (high PSNR, SSIM
-near 1) -- a low value means something outside the removed object's own
-mask changed, which is a bug (this project has hit exactly that failure
-mode twice: a densify/prune step and an opacity-reset call that were each,
-before being fixed, scoped to the whole scene instead of the hole).
+PSNR and SSIM are computed on the SAME bbox crop as LPIPS/FID -- all four
+are the paper's Table 5 numbers (hole-only protocol).
 
 Usage:
     python evaluate_spinnerf.py --scenes 1 2 3 --iteration 40000
@@ -70,7 +56,7 @@ from segmentation_metrics import _get_lpips_model, _LPIPS_DEVICE
 # stage3_refinement's own module-level sys.path.insert for
 # external/gaussian-splatting runs as an import side effect, so this also
 # makes `from utils.loss_utils import ssim` below resolve correctly.
-from stage3_refinement import _ssim_map
+import stage3_refinement  # noqa: F401 -- see import comment above
 from utils.loss_utils import ssim as _ssim_scalar
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -108,20 +94,6 @@ def _to_chw01_tensor(img01: np.ndarray) -> torch.Tensor:
     """HxWx3 [0,1] -> (1,3,H,W) [0,1] on the LPIPS device -- for SSIM, which
     (unlike LPIPS) expects [0,1], not [-1,1]."""
     return torch.from_numpy(img01).float().permute(2, 0, 1).unsqueeze(0).to(_LPIPS_DEVICE)
-
-
-def _masked_ssim(pred01: np.ndarray, gt01: np.ndarray, mask: np.ndarray) -> float | None:
-    """Mean SSIM over the True pixels of `mask`, computed on the FULL frame
-    (SSIM's 11x11 windowed formula needs real neighborhood context, unlike
-    plain per-pixel PSNR/L1 -- cropping first would corrupt values right at
-    the crop edge). Returns None if the mask is empty."""
-    if not mask.any():
-        return None
-    pred_t = _to_chw01_tensor(pred01)
-    gt_t = _to_chw01_tensor(gt01)
-    smap = _ssim_map(pred_t, gt_t)[0].mean(dim=0)  # (H,W), channel-averaged
-    mask_t = torch.from_numpy(mask).to(smap.device)
-    return float(smap[mask_t].mean().item())
 
 
 def _crop(img01: np.ndarray, bbox: tuple[int, int, int, int]) -> np.ndarray:
@@ -168,7 +140,6 @@ def evaluate_scene(scene: str, model_path_template: str, gt_root: Path,
 
     lpips_model = _get_lpips_model()
     lpips_scores, psnr_scores, ssim_scores = [], [], []
-    outside_psnr_scores, outside_ssim_scores = [], []
     render_crops, gt_crops = [], []
     for stem in common:
         mask_full = _load_mask_bool(mask_idx[stem])
@@ -185,8 +156,8 @@ def evaluate_scene(scene: str, model_path_template: str, gt_root: Path,
                   f"(render {r.shape} vs GT {g.shape}) -- skipping.")
             continue
 
-        # Inside the bbox: same paper-matching crop as LPIPS/FID, plus
-        # PSNR/SSIM as standard complementary fidelity/structure numbers.
+        # Inside the bbox: the paper's hole-only crop for all four Table 5
+        # metrics (LPIPS/FID computed here per-view; FID aggregated later).
         with torch.no_grad():
             d = lpips_model(_to_lpips_tensor(r), _to_lpips_tensor(g))
         lpips_scores.append(float(d.item()))
@@ -196,25 +167,6 @@ def evaluate_scene(scene: str, model_path_template: str, gt_root: Path,
         render_crops.append(r)
         gt_crops.append(g)
 
-        # Outside the object mask (full-frame complement, not a padded box
-        # -- this is deliberately checking the WHOLE rest of the scene, not
-        # just "near" it): did anything outside the hole get degraded?
-        # Directly validates the "don't touch outside the hole" invariant
-        # this whole pipeline depends on -- would have caught the scene-
-        # wide opacity-reset/pruning bugs automatically.
-        if render_full.shape == gt_full.shape:
-            outside_mask = ~mask_full
-            if outside_mask.any():
-                outside_psnr_scores.append(_psnr(render_full[outside_mask], gt_full[outside_mask]))
-                with torch.no_grad():
-                    s = _masked_ssim(render_full, gt_full, outside_mask)
-                if s is not None:
-                    outside_ssim_scores.append(s)
-        else:
-            print(f"  [scene {scene}] WARNING: full-frame shape mismatch on {stem} "
-                  f"(render {render_full.shape} vs GT {gt_full.shape}) -- "
-                  f"skipping outside-hole metrics for this view.")
-
     def _mean_std(xs):
         arr = np.array(xs, dtype=np.float64)
         return ((float(arr.mean()), float(arr.std())) if len(arr) else (float("nan"), float("nan")))
@@ -222,16 +174,12 @@ def evaluate_scene(scene: str, model_path_template: str, gt_root: Path,
     lpips_mean, lpips_std = _mean_std(lpips_scores)
     psnr_mean, psnr_std = _mean_std(psnr_scores)
     ssim_mean, ssim_std = _mean_std(ssim_scores)
-    outside_psnr_mean, outside_psnr_std = _mean_std(outside_psnr_scores)
-    outside_ssim_mean, outside_ssim_std = _mean_std(outside_ssim_scores)
     return {
         "scene": scene,
         "n_views": len(lpips_scores),
         "lpips_mean": lpips_mean, "lpips_std": lpips_std,
         "psnr_mean": psnr_mean, "psnr_std": psnr_std,
         "ssim_mean": ssim_mean, "ssim_std": ssim_std,
-        "outside_psnr_mean": outside_psnr_mean, "outside_psnr_std": outside_psnr_std,
-        "outside_ssim_mean": outside_ssim_mean, "outside_ssim_std": outside_ssim_std,
         "render_crops": render_crops,
         "gt_crops": gt_crops,
     }
@@ -290,51 +238,38 @@ def main():
               f"FID={scene_fid:.2f}  "
               f"PSNR={res['psnr_mean']:.2f} (+/- {res['psnr_std']:.2f})  "
               f"SSIM={res['ssim_mean']:.4f} (+/- {res['ssim_std']:.4f})")
-        print(f"           outside-hole: "
-              f"PSNR={res['outside_psnr_mean']:.2f} (+/- {res['outside_psnr_std']:.2f})  "
-              f"SSIM={res['outside_ssim_mean']:.4f} (+/- {res['outside_ssim_std']:.4f})")
 
     pooled_fid = _fid_score(fid_metric, all_render_crops, all_gt_crops)
 
     print("\n" + "=" * 100)
-    print(f"Inside object-mask bbox (paper protocol) + outside-hole (rest of scene, unmasked check)")
+    print("Inside object-mask bbox (paper protocol, Table 5)")
     print("-" * 100)
-    print(f"{'scene':<8} {'n':>4} {'LPIPS':>9} {'FID':>8} {'PSNR':>8} {'SSIM':>8} "
-          f"{'out-PSNR':>10} {'out-SSIM':>10}")
+    print(f"{'scene':<8} {'n':>4} {'LPIPS':>9} {'FID':>8} {'PSNR':>8} {'SSIM':>8}")
     for r in results:
         print(f"{r['scene']:<8} {r['n_views']:>4} {r['lpips_mean']:>9.4f} {r['fid']:>8.2f} "
-              f"{r['psnr_mean']:>8.2f} {r['ssim_mean']:>8.4f} "
-              f"{r['outside_psnr_mean']:>10.2f} {r['outside_ssim_mean']:>10.4f}")
+              f"{r['psnr_mean']:>8.2f} {r['ssim_mean']:>8.4f}")
     print("-" * 100)
     macro_lpips_mean = float(np.mean([r["lpips_mean"] for r in results]))
     macro_psnr_mean = float(np.mean([r["psnr_mean"] for r in results]))
     macro_ssim_mean = float(np.mean([r["ssim_mean"] for r in results]))
-    macro_out_psnr_mean = float(np.mean([r["outside_psnr_mean"] for r in results]))
-    macro_out_ssim_mean = float(np.mean([r["outside_ssim_mean"] for r in results]))
     print(f"{'macro avg':<8} {'':>4} {macro_lpips_mean:>9.4f} {pooled_fid:>8.2f} "
-          f"{macro_psnr_mean:>8.2f} {macro_ssim_mean:>8.4f} "
-          f"{macro_out_psnr_mean:>10.2f} {macro_out_ssim_mean:>10.4f}")
+          f"{macro_psnr_mean:>8.2f} {macro_ssim_mean:>8.4f}")
     print(f"  (FID pooled across all {sum(r['n_views'] for r in results)} views; "
           f"everything else macro-averaged per scene)")
     print("=" * 100)
     if args.output_json:
         keys = ("scene", "n_views", "lpips_mean", "lpips_std", "fid", "psnr_mean", "psnr_std",
-                "ssim_mean", "ssim_std", "outside_psnr_mean", "outside_psnr_std",
-                "outside_ssim_mean", "outside_ssim_std")
+                "ssim_mean", "ssim_std")
         out = {
             "per_scene": [{k: r[k] for k in keys if k in r} for r in results],
             "macro_avg": {"lpips": macro_lpips_mean, "psnr": macro_psnr_mean,
-                          "ssim": macro_ssim_mean, "outside_psnr": macro_out_psnr_mean,
-                          "outside_ssim": macro_out_ssim_mean},
+                          "ssim": macro_ssim_mean},
             "fid_pooled": pooled_fid,
         }
         Path(args.output_json).parent.mkdir(parents=True, exist_ok=True)
         with open(args.output_json, "w") as f:
             json.dump(out, f, indent=2, default=float)
         print(f"Results written to {args.output_json}")
-    print("outside-hole PSNR/SSIM should be very high (near-perfect) -- that's the "
-          "'rest of the scene is untouched' check. A low value there means something "
-          "outside the removed object's own mask changed, which shouldn't happen.")
 
 
 if __name__ == "__main__":

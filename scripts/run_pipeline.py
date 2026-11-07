@@ -44,7 +44,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CONFIG_DIR = REPO_ROOT / "configs"
 STEPS = ("preprocess", "train", "eval")
-METRICS = ("iou", "boundary_iou", "accuracy", "fg_psnr", "bg_psnr")
+METRICS = ("iou", "boundary_iou", "accuracy")
 
 sys.path.insert(0, str(REPO_ROOT / "src"))
 from config_utils import as_flags, scene_paths  # noqa: E402 -- shared with preprocessing.py/train.py

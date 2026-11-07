@@ -19,9 +19,7 @@
   "paper": {
     "iou": 0.939,
     "boundary_iou": 0.751,
-    "accuracy": 0.99,
-    "fg_psnr": 21.58,
-    "bg_psnr": 22.06
+    "accuracy": 0.99
   },
   "notes": {
     "paper_run": "PAMGS output/rigidgs/mipnerf360/kitchen/run_new_Explicit",

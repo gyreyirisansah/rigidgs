@@ -18,9 +18,7 @@
   "paper": {
     "iou": 0.978,
     "boundary_iou": 0.877,
-    "accuracy": 0.996,
-    "fg_psnr": 26.58,
-    "bg_psnr": 20.56
+    "accuracy": 0.996
   },
   "notes": {
     "paper_run": "PAMGS output/rigidgs/llff/horns/WACV2027_Round2/Full_RigidGS_Training_3px"

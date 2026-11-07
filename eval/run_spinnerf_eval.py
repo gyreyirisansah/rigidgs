@@ -6,11 +6,8 @@ reimplement either:
   1. render_spinnerf_holdout.py -- renders the 40 held-out no-object
      poses for a trained checkpoint (FG + BG-hole), per scene.
   2. evaluate_spinnerf.py -- scores those renders against the GT
-     no-object photos: LPIPS + FID inside the object-mask bbox (the SPIn-
-     NeRF paper's own protocol), PSNR + SSIM in that same bbox, and
-     outside-hole PSNR/SSIM (full-frame complement of the mask -- checks
-     that refining the hole didn't degrade the rest of the scene, which
-     the paper's own inside-the-box metrics can't see at all).
+     no-object photos: LPIPS + FID + PSNR + SSIM inside the object-mask
+     bbox (Table 5's hole-only protocol).
 
 Skips re-rendering a scene if a holdout render already exists for the
 resolved checkpoint iteration (use --force_render to redo it anyway) --

@@ -18,9 +18,7 @@
   "paper": {
     "iou": 0.968,
     "boundary_iou": 0.792,
-    "accuracy": 0.993,
-    "fg_psnr": 25.46,
-    "bg_psnr": 22.83
+    "accuracy": 0.993
   },
   "notes": {
     "paper_run": "PAMGS output/rigidgs/llff/flower/WACV2027_Round2/Full_RigidGS_Training_1px",

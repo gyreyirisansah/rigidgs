@@ -18,9 +18,7 @@
   "paper": {
     "iou": 0.964,
     "boundary_iou": 0.783,
-    "accuracy": 0.986,
-    "fg_psnr": 20.22,
-    "bg_psnr": 17.22
+    "accuracy": 0.986
   },
   "notes": {
     "paper_run": "PAMGS output/rigidgs/tanks_and_temples/Train/run_new_Explicit",

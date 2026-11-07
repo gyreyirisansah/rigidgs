@@ -18,9 +18,7 @@
   "paper": {
     "iou": 0.59,
     "boundary_iou": 0.55,
-    "accuracy": 0.938,
-    "fg_psnr": 12.46,
-    "bg_psnr": 15.02
+    "accuracy": 0.938
   },
   "notes": {
     "paper_run": "PAMGS output/rigidgs/llff/trex/run_LERN_FREEZE_EXPLICIT",

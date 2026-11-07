@@ -19,9 +19,7 @@
   "paper": {
     "iou": 0.963,
     "boundary_iou": 0.941,
-    "accuracy": 0.999,
-    "fg_psnr": 24.41,
-    "bg_psnr": 26.85
+    "accuracy": 0.999
   },
   "notes": {
     "paper_run": "PAMGS output/rigidgs/mipnerf360/garden/run_LERN_FREEZE_EXPLICIT",

@@ -276,7 +276,7 @@ python eval/evaluate_segmentation.py \
 
 `GT_Masks/<dataset>/<scene>/` at the repository root holds one mask per scene -- whichever frame the GT segmentation mask was actually drawn on. The matching photo isn't staged anywhere; it's looked up live in `data/<dataset>/<scene>/images/` at eval time, so there's nothing to download or keep in sync beyond the dataset itself. (`--gt_root` also accepts a separately staged GT photo directory, if you have one, but it's not needed otherwise.)
 
-This writes `per_view.csv`, `per_scene.csv` and `per_dataset.csv` (IoU, boundary IoU, accuracy, …). Each ground-truth mask is matched to the render whose camera content is closest to the mask's frame. That matching is decoupled from the metric being reported.
+This writes `per_view.csv`, `per_scene.csv` and `per_dataset.csv` with the paper's three segmentation metrics: IoU, boundary IoU, accuracy. Each ground-truth mask is matched to the render whose camera content is closest to the mask's frame (GT photos are used only for this matching, not scored directly). That matching is decoupled from the metric being reported.
 
 ### Object removal on SPIn-NeRF (Table 5)
 

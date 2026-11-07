@@ -7,7 +7,8 @@ Walks the directory tree:
 
 For each (method, dataset, scene) combination, finds GT images, matches each
 rendered view to its best-aligned GT (oracle PSNR matching by default, like
-COB-GS / SPIn-NeRF), and computes the full metric suite.
+COB-GS / SPIn-NeRF), and computes the paper's metrics: IoU, boundary IoU,
+accuracy.
 
 Outputs three CSVs at increasing aggregation:
     per_view.csv      : one row per (method, dataset, scene, view)
@@ -24,8 +25,7 @@ Example:
     python evaluate_segmentation.py \\
         --results_root  /path/to/RigidGS_Results_Accum \\
         --gt_mask_root  GT_Masks \\
-        --output_dir    /path/to/eval_output \\
-        --skip_lpips
+        --output_dir    /path/to/eval_output
 
 No --gt_root is needed in the common case: GT_Masks ships in the repo, and
 each mask's own target photo is looked up live in
@@ -52,13 +52,8 @@ from PIL import Image
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from segmentation_metrics import (
     compute_iou,
-    compute_boundary_fscore,
     compute_boundary_iou,
     compute_accuracy,
-    compute_foreground_leakage,
-    _masked_psnr,
-    _masked_ssim,
-    _masked_lpips,
     _as_float_rgb,
     _as_bool_mask,
 )
@@ -462,81 +457,45 @@ def mask_score_match(
 # ----------------------------------------------------------------------------
 def evaluate_view_safe(
     fg_render: np.ndarray | None,
-    bg_render: np.ndarray | None,
-    gt_image: np.ndarray | None,
     gt_mask: np.ndarray | None,
     pred_mask: np.ndarray | None,
-    boundary_tolerance: int = 2,
-    skip_lpips: bool = False,
 ) -> dict[str, float]:
-    """Compute every metric that's possible given available inputs; NaN otherwise.
+    """Compute the paper's segmentation metrics (iou, boundary_iou, accuracy)
+    from whatever inputs are available; NaN otherwise.
 
-    fg_render/bg_render/gt_image may all be None: a render can be missing on
-    disk for the matched stem (e.g. an incomplete export), and a GT mask can
-    be matched with no corresponding real GT photo at all (e.g. score-based
-    matching on a scene with many per-frame masks but only a handful of
-    staged reference photos -- see extend_gt_idx_with_orphan_masks, which
-    can only resolve a raw photo for llff). Mask-only metrics (iou/
-    boundary_f/boundary_iou/accuracy/leakage) don't need any of them and are
-    still computed from pred_mask/gt_mask; only the RGB-dependent metrics
-    (fg/bg psnr/ssim/lpips) are left NaN when renders or the GT photo are
-    unavailable.
+    fg_render may be None (a render can be missing on disk for the matched
+    stem, e.g. an incomplete export) -- it's only used as a fallback to
+    derive pred_mask when no explicit predicted mask is given. gt_mask can
+    likewise be matched with no corresponding real GT photo at all (e.g.
+    score-based matching on a scene with many per-frame masks but only a
+    handful of staged reference photos -- see extend_gt_idx_with_orphan_masks,
+    which can only resolve a raw photo for llff); that doesn't matter here
+    since these metrics never need a GT photo, only the GT mask.
     """
-    have_renders = fg_render is not None and bg_render is not None and gt_image is not None
-    if have_renders:
-        fg_render = _as_float_rgb(fg_render)
-        bg_render = _as_float_rgb(bg_render)
-        gt_image = _as_float_rgb(gt_image)
-
-        # Align shapes if needed (GT might be a different resolution than render).
-        # This is specifically for masking the RGB render (fg_psnr/fg_ssim/...),
-        # which must be pixel-aligned with fg_render/bg_render/gt_image -- so
-        # gt_mask_for_rgb is deliberately resized to the render's own shape here,
-        # separate from the mask-vs-mask comparison below.
-        if fg_render.shape != gt_image.shape:
-            gt_image = _resize_to(gt_image, fg_render.shape[:2])
-    gt_mask_for_rgb = None
-    if have_renders and gt_mask is not None:
-        gt_mask_for_rgb = gt_mask
-        if gt_mask_for_rgb.shape != fg_render.shape[:2]:
-            m_img = Image.fromarray(gt_mask_for_rgb.astype(np.uint8) * 255, "L")
-            m_img = m_img.resize((fg_render.shape[1], fg_render.shape[0]), Image.NEAREST)
-            gt_mask_for_rgb = np.array(m_img) > 127
-        else:
-            gt_mask_for_rgb = _as_bool_mask(gt_mask_for_rgb)
-
-    # Derive pred_mask from fg_render if not provided (already at fg_render's shape)
-    if pred_mask is None and have_renders:
-        pred_mask = fg_render.sum(axis=-1) > 1e-6
+    # Derive pred_mask from fg_render if not provided.
+    if pred_mask is None and fg_render is not None:
+        pred_mask = _as_float_rgb(fg_render).sum(axis=-1) > 1e-6
 
     result = {
         "iou": float("nan"),
-        "boundary_f": float("nan"),
         "boundary_iou": float("nan"),
         "accuracy": float("nan"),
-        "leakage": float("nan"),
-        "fg_psnr": float("nan"),
-        "fg_ssim": float("nan"),
-        "fg_lpips": float("nan"),
-        "bg_psnr": float("nan"),
-        "bg_ssim": float("nan"),
-        "bg_lpips": float("nan"),
     }
 
     # Mask metrics require gt_mask and pred_mask (pred_mask may be None here
-    # if renders are also missing -- e.g. fg render absent on disk and no
-    # explicit predicted mask either -- in which case nothing is computable).
+    # if the render is also missing on disk and no explicit predicted mask
+    # was given either, in which case nothing is computable).
     if gt_mask is not None and pred_mask is not None:
         gt_mask = _as_bool_mask(gt_mask)
 
-        # IoU/boundary_f/boundary_iou/accuracy/leakage: never upsample --
-        # resize whichever of {pred_mask, gt_mask} is larger down to match
-        # the smaller one, independent of fg_render's resolution. Nearest-
-        # neighbor upsampling only fabricates blocky fake detail; boundary
-        # IoU in particular is sensitive enough to this that comparing
-        # against artificially-upsampled pixels gives meaningless numbers.
-        # See eval_all_models.py's evaluate_scene for the same fix, verified
-        # there to reproduce reference numbers exactly once applied.
+        # IoU/boundary_iou/accuracy: never upsample -- resize whichever of
+        # {pred_mask, gt_mask} is larger down to match the smaller one,
+        # independent of fg_render's resolution. Nearest-neighbor upsampling
+        # only fabricates blocky fake detail; boundary IoU in particular is
+        # sensitive enough to this that comparing against artificially-
+        # upsampled pixels gives meaningless numbers. See eval_all_models.py's
+        # evaluate_scene for the same fix, verified there to reproduce
+        # reference numbers exactly once applied.
         if pred_mask.shape == gt_mask.shape:
             p_m, g_m = pred_mask, gt_mask
         elif pred_mask.size <= gt_mask.size:
@@ -549,29 +508,8 @@ def evaluate_view_safe(
             p_m, g_m = np.array(m_img) > 127, gt_mask
 
         result["iou"] = compute_iou(p_m, g_m)
-        result["boundary_f"] = compute_boundary_fscore(p_m, g_m, boundary_tolerance)
         result["boundary_iou"] = compute_boundary_iou(p_m, g_m)
         result["accuracy"] = compute_accuracy(p_m, g_m)
-        result["leakage"] = compute_foreground_leakage(p_m, g_m)
-
-        # FG/BG RGB metrics use gt_mask_for_rgb (render-resolution) to
-        # define regions, since these must be pixel-aligned with the render.
-        # Only computable when both renders are actually present on disk.
-        if have_renders:
-            bg_mask = ~gt_mask_for_rgb
-            result["fg_psnr"] = _masked_psnr(fg_render, gt_image, gt_mask_for_rgb)
-            result["fg_ssim"] = _masked_ssim(fg_render, gt_image, gt_mask_for_rgb)
-            result["bg_psnr"] = _masked_psnr(bg_render, gt_image, bg_mask)
-            result["bg_ssim"] = _masked_ssim(bg_render, gt_image, bg_mask)
-            if not skip_lpips:
-                result["fg_lpips"] = _masked_lpips(fg_render, gt_image, gt_mask_for_rgb)
-                result["bg_lpips"] = _masked_lpips(bg_render, gt_image, bg_mask)
-    elif have_renders:
-        # Without GT mask, we can still report unmasked FG/BG-region PSNR by using
-        # the predicted mask as a proxy. This is biased toward the method's own
-        # prediction, so we mark it explicitly with a "_self" suffix and leave
-        # the standard fg_psnr/bg_psnr as NaN.
-        pass
 
     return result
 
@@ -616,10 +554,9 @@ def main():
                              "data/<dataset>/<scene>/images/, so a fresh clone with the "
                              "datasets downloaded needs no separate GT photo staging.")
     parser.add_argument("--gt_mask_root", type=Path, default=None,
-                        help="Optional GT foreground masks, "
-                             "<gt_mask_root>/<dataset>/<scene>/*.png. "
-                             "If omitted, mask metrics (IoU, Boundary F, Leakage, "
-                             "FG-PSNR, BG-PSNR, LPIPS) are reported as NaN.")
+                        help="GT foreground masks, <gt_mask_root>/<dataset>/<scene>/*.png "
+                             "(e.g. GT_Masks). Needed for every metric here (IoU, "
+                             "Boundary IoU, Accuracy) -- without it they're all NaN.")
     parser.add_argument("--output_dir", type=Path, required=True,
                         help="Directory for output CSVs.")
     parser.add_argument("--matching", choices=["oracle", "filename"], default="oracle",
@@ -631,9 +568,6 @@ def main():
                         help="Restrict to specific datasets.")
     parser.add_argument("--scenes", nargs="+", default=None,
                         help="Restrict to specific scenes.")
-    parser.add_argument("--skip_lpips", action="store_true",
-                        help="Skip LPIPS (faster, no AlexNet download required).")
-    parser.add_argument("--boundary_tolerance", type=int, default=2)
     parser.add_argument("--match_resolution", type=int, default=256,
                         help="Resolution for oracle PSNR matching (default 256).")
     parser.add_argument("--orphan_mask_matching", choices=["content", "score"], default="content",
@@ -661,7 +595,7 @@ def main():
     print(f"Discovered {len(combos)} (method, dataset, scene) combinations.")
     print(f"Methods: {sorted(set(c[0] for c in combos))}")
     print(f"Datasets: {sorted(set(c[1] for c in combos))}")
-    print(f"Matching: {args.matching}, LPIPS: {'off' if args.skip_lpips else 'on'}\n")
+    print(f"Matching: {args.matching}\n")
 
     per_view_rows: list[dict] = []
     per_scene_rows: list[dict] = []
@@ -767,19 +701,11 @@ def main():
         scene_rows: list[dict] = []
         for g_stem, r_stem in matching:
             try:
-                # r_stem may not have both fg and bg on disk (e.g. an
-                # incomplete export) -- score-based matching can still pick
-                # it purely off its fg_mask. Pass None rather than KeyError;
-                # evaluate_view_safe computes mask-only metrics in that case
-                # and leaves the RGB-dependent ones NaN.
+                # r_stem may not have fg on disk (e.g. an incomplete export)
+                # -- score-based matching can still pick it purely off its
+                # fg_mask. Pass None rather than KeyError; evaluate_view_safe
+                # only needs it as a pred_mask fallback when fg_mask is absent.
                 fg = _load_image_rgb(fg_idx[r_stem]) if r_stem in fg_idx else None
-                bg = _load_image_rgb(bg_idx[r_stem]) if r_stem in bg_idx else None
-                # g_stem may have no real GT photo at all (score-based
-                # matching added it straight from gt_mask_idx, and
-                # extend_gt_idx_with_orphan_masks can only resolve a raw
-                # reference photo for llff -- see evaluate_view_safe's
-                # docstring). RGB metrics are simply unavailable then.
-                gt_img = _load_image_rgb(gt_idx[g_stem]) if g_stem in gt_idx else None
                 gt_mask = None
                 gt_mask_stem = g_stem if g_stem in gt_mask_idx else None
                 if gt_mask_stem is not None:
@@ -790,12 +716,7 @@ def main():
                 elif use_fg_as_masks and r_stem in fg_idx:
                     pred_mask = _mask_from_fg_render(fg_idx[r_stem])
 
-                m = evaluate_view_safe(
-                    fg_render=fg, bg_render=bg, gt_image=gt_img,
-                    gt_mask=gt_mask, pred_mask=pred_mask,
-                    boundary_tolerance=args.boundary_tolerance,
-                    skip_lpips=args.skip_lpips,
-                )
+                m = evaluate_view_safe(fg_render=fg, gt_mask=gt_mask, pred_mask=pred_mask)
                 m.update({"method": method, "dataset": dataset, "scene": scene,
                           "view": r_stem, "gt_view": g_stem,
                           "gt_mask_view": gt_mask_stem})
@@ -813,9 +734,7 @@ def main():
     # Write per-view CSV
     if per_view_rows:
         cols = ["method", "dataset", "scene", "view", "gt_view", "gt_mask_view"] + [
-            "iou", "boundary_f", "boundary_iou", "accuracy", "leakage",
-            "fg_psnr", "fg_ssim", "fg_lpips",
-            "bg_psnr", "bg_ssim", "bg_lpips",
+            "iou", "boundary_iou", "accuracy",
         ]
         with open(args.output_dir / "per_view.csv", "w", newline="") as f:
             w = csv.DictWriter(f, fieldnames=cols, extrasaction="ignore")
@@ -827,9 +746,7 @@ def main():
 
     # Write per-scene CSV
     if per_scene_rows:
-        metric_keys = ["iou", "boundary_f", "boundary_iou", "accuracy", "leakage",
-                       "fg_psnr", "fg_ssim", "fg_lpips",
-                       "bg_psnr", "bg_ssim", "bg_lpips"]
+        metric_keys = ["iou", "boundary_iou", "accuracy"]
         cols = ["method", "dataset", "scene", "n_views"]
         for k in metric_keys:
             cols.extend([f"{k}_mean", f"{k}_std", f"{k}_n"])
@@ -853,9 +770,7 @@ def main():
         by_md[(r["method"], r["dataset"])].append(r)
 
     per_dataset_rows = []
-    metric_keys = ["iou", "boundary_f", "boundary_iou", "accuracy", "leakage",
-                   "fg_psnr", "fg_ssim", "fg_lpips",
-                   "bg_psnr", "bg_ssim", "bg_lpips"]
+    metric_keys = ["iou", "boundary_iou", "accuracy"]
     for (method, dataset), scene_list in sorted(by_md.items()):
         out = {"method": method, "dataset": dataset, "n_scenes": len(scene_list)}
         for k in metric_keys:
@@ -887,15 +802,11 @@ def main():
     print("\n" + "=" * 80)
     print("  PER-DATASET SUMMARY")
     print("=" * 80)
-    print(f"{'method':<20} {'dataset':<20} {'n':>3} {'IoU':>7} {'bIoU':>7} {'Bnd-F':>7} {'Acc':>7} {'Leak':>7} "
-          f"{'FG-PSNR':>9} {'BG-PSNR':>9} {'FG-LPIPS':>9} {'BG-LPIPS':>9}")
+    print(f"{'method':<20} {'dataset':<20} {'n':>3} {'IoU':>7} {'bIoU':>7} {'Acc':>7}")
     for r in per_dataset_rows:
         print(f"{r['method']:<20} {r['dataset']:<20} {r['n_scenes']:>3} "
-              f"{r['iou_mean']:>7.3f} {r['boundary_iou_mean']:>7.3f} {r['boundary_f_mean']:>7.3f} "
-              f"{r['accuracy_mean']:>7.3f} "
-              f"{r['leakage_mean']:>7.3f} "
-              f"{r['fg_psnr_mean']:>9.2f} {r['bg_psnr_mean']:>9.2f} "
-              f"{r['fg_lpips_mean']:>9.3f} {r['bg_lpips_mean']:>9.3f}")
+              f"{r['iou_mean']:>7.3f} {r['boundary_iou_mean']:>7.3f} "
+              f"{r['accuracy_mean']:>7.3f}")
 
     if skipped:
         print(f"\nSKIPPED {len(skipped)} combinations:")

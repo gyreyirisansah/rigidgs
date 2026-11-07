@@ -18,9 +18,7 @@
   "paper": {
     "iou": 0.98,
     "boundary_iou": 0.877,
-    "accuracy": 0.995,
-    "fg_psnr": 22.19,
-    "bg_psnr": 24.32
+    "accuracy": 0.995
   },
   "notes": {
     "paper_run": "PAMGS output/rigidgs/innerf360/bear/run_new_Explicit",
