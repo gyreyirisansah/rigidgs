@@ -55,7 +55,7 @@ data/
   spinnerf/{2,4,10}/            # the raw SPIn-NeRF scene folders, unchanged:
                                 # images/, images_4/{label,test_label}/, sparse/0/
 
-Ground Truths/<dataset>/<scene>/   # evaluation photos (repository root, not under data/)
+
 GT_Masks/<dataset>/<scene>/        # evaluation object masks (repository root, not under data/)
 ```
 
