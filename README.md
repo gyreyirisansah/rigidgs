@@ -1,6 +1,6 @@
 # RigidGS: Geometry-Aware Object Decoupling for Rigid-Body Interaction in 3D Gaussian Splatting
 
-Official code for **RigidGS** (WACV 2027). Project page: `docs/index.html` (served by GitHub Pages from the `docs/` folder).
+Official code for **RigidGS** (WACV 2027). Paper: [arXiv:2611.10199](https://arxiv.org/abs/2611.10199). Project page: `docs/index.html` (served by GitHub Pages from the `docs/` folder).
 
 RigidGS segments objects in a 3D Gaussian Splatting scene so they can be moved,
 removed or interacted with as rigid parts. Object labels come from SAM2 masks
