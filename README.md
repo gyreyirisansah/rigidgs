@@ -325,5 +325,11 @@ RigidGS builds on [3D Gaussian Splatting](https://github.com/graphdeco-inria/gau
 ## Citation
 
 ```bibtex
-TODO
+@article{gyreyiri2026rigidgs,
+  title   = {RigidGS: Geometry-Aware Object Decoupling for
+             Rigid-Body Interaction in 3D Gaussian Splatting},
+  author  = {Gyreyiri, Paul Sansah and Shukla, Diksha},
+  journal = {arXiv preprint arXiv:2611.10199},
+  year    = {2026}
+}
 ```
